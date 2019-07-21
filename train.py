@@ -1,29 +1,19 @@
 import math, random, os, sys, time, glob, cv2
 import tensorflow as tf
 import numpy as np
-from numpy.random import seed
-from tensorflow import set_random_seed
 from sklearn.utils import shuffle
-
-#Adding Seed so that random initialization is consistent
-seed(1)
-set_random_seed(2)
-
-#Prepare input data
-# Path to training set
-categories = ['positive', 'negative']
 
 # Hyperparameters
 batchSize = 32
-imageSize = 256
+imageSize = 128
 numChannels = 3
+categories = ['positive', 'negative']
 
-# features
-x = tf.placeholder(tf.float32, shape=[None, imageSize, imageSize, numChannels], name='x')
-
-## labels
-y_true = tf.placeholder(tf.float32, shape=[None, len(categories)], name='y_true')
-y_true_cls = tf.argmax(y_true, dimension=1)
+def createPlaceholders():
+	x = tf.placeholder(tf.float32, shape=[None, imageSize, imageSize, numChannels], name='x')
+	y = tf.placeholder(tf.float32, shape=[None, len(categories)], name='y')
+	yClasses = tf.argmax(y, dimension=1)
+	return x, y, yClasses
 
 # Network parameters
 filter_size_conv1 = 3
@@ -122,7 +112,7 @@ def getNewBatch(set, bound):
 
 def updateBounds(trainingBound, trainingSet, validBound, validationSet):
   if trainingBound > len(trainingSet[0]):
-    trainingBound += (trainingBound + batchSize) % len(trainingSet[0])
+    trainingBound = (trainingBound + batchSize) % len(trainingSet[0])
   else:
     trainingBound += batchSize
   if validBound > len(validationSet[0]):
@@ -139,29 +129,18 @@ def fixClassLabel(className):
   return className
 
 # Convolutional neural netowrk layer
-def create_convolutional_layer(input,
-               num_input_channels, 
-               conv_filter_size,        
-               num_filters):  
+def create_convolutional_layer(input, num_input_channels, conv_filter_size, num_filters):  
     
   weights = tf.Variable(tf.truncated_normal([conv_filter_size, conv_filter_size, num_input_channels, num_filters],
                          stddev=0.05)) 
-  
   biases = tf.Variable(tf.constant(0.05, shape=[num_filters]))
 
   ## Creating the convolutional layer
-  layer = tf.nn.conv2d(input=input,
-                    filter=weights,
-                    strides=[1, 1, 1, 1],
-                    padding='SAME')
-
+  layer = tf.nn.conv2d(input=input, filter=weights, strides=[1, 1, 1, 1], padding='SAME')
   layer += biases
 
   ## Max-pooling.  
-  layer = tf.nn.max_pool(value=layer,
-                          ksize=[1, 2, 2, 1],
-                          strides=[1, 2, 2, 1],
-                          padding='SAME')
+  layer = tf.nn.max_pool(value=layer, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
   
   ## Relu: activation function
   layer = tf.nn.relu(layer)
@@ -204,12 +183,8 @@ def create_fc_layer(input,
 def show_progress(session, epoch, feed_dict_train, feed_dict_validate, val_loss, accuracy,
                    merged, train_writer, test_writer, i):
   msg = "Training Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%},  Validation Loss: {3:.3f}"
-  #if i % 10 == 0:
   summary_train, acc = session.run([merged, accuracy], feed_dict=feed_dict_train)
   train_writer.add_summary(summary_train, i)
-  #print(msg.format(epoch + 1, acc, val_acc, val_loss))
-  #acc = session.run(accuracy, feed_dict=feed_dict_train)
-  #else:
   summary_test, val_acc = session.run([merged, accuracy], feed_dict=feed_dict_validate)
   test_writer.add_summary(summary_test, i)
   print(msg.format(epoch + 1, acc, val_acc, val_loss))
@@ -217,7 +192,7 @@ def show_progress(session, epoch, feed_dict_train, feed_dict_validate, val_loss,
   #val_acc = session.run(accuracy, feed_dict=feed_dict_validate)
 
 def train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy, merged, trainWriter, 
-          testWriter, num_iteration):
+          testWriter, num_iteration, x, y):
   total_iterations = 0
   trainingBound = 0
   validBound = 0
@@ -231,10 +206,8 @@ def train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy,
       trainingBound, validBound = updateBounds(trainingBound, trainingSet, validBound, validationSet)
       
       # feed training and validation batchs
-      feed_dict_tr = {x: x_batch,
-                          y_true: y_true_batch}
-      feed_dict_val = {x: x_valid_batch,
-                            y_true: y_valid_batch}
+      feed_dict_tr = {x: x_batch, y: y_true_batch}
+      feed_dict_val = {x: x_valid_batch, y: y_valid_batch}
 
       # run training algo
       session.run(optimiser, feed_dict=feed_dict_tr)
@@ -270,6 +243,7 @@ def main():
   print("Number of files in Training-set:\t\t{}".format(len(trainingSet[1])))
   print("Number of files in Validation-set:\t{}".format(len(validationSet[1])))
 
+  x, y, yClasses = createPlaceholders()
   session = tf.Session()
   layer_conv1 = create_convolutional_layer(input=x,
                 num_input_channels=numChannels,
@@ -322,10 +296,10 @@ def main():
 
   y_pred_cls = tf.compat.v1.argmax(y_pred, dimension=1)
   session.run(tf.global_variables_initializer())
-  crossEntropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits=layer_fc2, labels=y_true)
+  crossEntropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits=layer_fc2, labels=y)
   cost = tf.reduce_mean(crossEntropy)
-  optimiser = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
-  correctPrediction = tf.equal(y_pred_cls, y_true_cls)
+  optimiser = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-5).minimize(cost)
+  correctPrediction = tf.equal(y_pred_cls, yClasses)
   accuracy = tf.reduce_mean(tf.cast(correctPrediction, tf.float32))
   merged = tf.compat.v1.summary.merge_all()
   trainWriter = tf.compat.v1.summary.FileWriter('summary/train', session.graph)
@@ -336,7 +310,7 @@ def main():
 
   # 290 magic number best performance on my pc, but on different devices this number changes... 
   train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy, merged, 
-          trainWriter, testWriter , 10000)
+          trainWriter, testWriter , 10000, x, y)
 
 ############################
 # START OF PROGRAM

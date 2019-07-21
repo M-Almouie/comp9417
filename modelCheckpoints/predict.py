@@ -8,7 +8,7 @@ import cv2
 
 # First, pass the path of the image
 image_path=sys.argv[1]
-image_size=256
+image_size=128
 num_channels=3
 images = []
 bodyParts = os.listdir(image_path)
@@ -52,7 +52,7 @@ for bp in bodyParts:
 
 				## Let's feed the images to the input placeholders
 				x= graph.get_tensor_by_name("x:0") 
-				y_true = graph.get_tensor_by_name("y_true:0") 
+				y_true = graph.get_tensor_by_name("y:0") 
 				y_test_images = np.zeros((1, 2))
 
 				### Creating the feed_dict that is required to be fed to calculate y_pred 

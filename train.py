@@ -4,8 +4,8 @@ import numpy as np
 from sklearn.utils import shuffle
 
 # Hyperparameters
-batchSize = 32
-imageSize = 128
+batchSize = 16
+imageSize = 64
 numChannels = 3
 categories = ['positive', 'negative']
 
@@ -23,19 +23,13 @@ filter_size_conv2 = 3
 num_filters_conv2 = 32
 
 filter_size_conv3 = 3
-num_filters_conv3 = 32
-    
+num_filters_conv3 = 64
+
 filter_size_conv4 = 3
 num_filters_conv4 = 32
 
 filter_size_conv5 = 3
-num_filters_conv5 = 32
-
-filter_size_conv6 = 3
-num_filters_conv6 = 32
-
-filter_size_conv7 = 3
-num_filters_conv7 = 32
+num_filters_conv5 = 64
 
 fc_layer_size = 128
 
@@ -57,54 +51,56 @@ def preprocessImages(trainingPath):
   labels = [] 
   img_names = []
   print('Processing training images:------------------')
-  bodyParts = os.listdir(trainingPath)
-  for bp in bodyParts:
+  '''for bp in bodyParts:
     print("----------------- Reading Body Part: " + bp)
-    patients = os.listdir(trainingPath + "/" + bp)
-    for patient in patients:
-      classesInDir = os.listdir(trainingPath + "/" + bp + "/" + patient)
-      for fields in classesInDir:
-        oldFields = fields 
-        fields = fixClassLabel(fields)
-        index = categories.index(fields)
-        path = os.path.join(trainingPath, bp, patient, oldFields, '*g')
-        files = glob.glob(path)
-        for file in files:
-            image = cv2.imread(file)
-            image = cv2.resize(image, (imageSize, imageSize),0,0, cv2.INTER_LINEAR)
-            image = image.astype(np.float32)
-            image = np.multiply(image, 1.0 / 255.0)
-            images.append(image)
-            label = np.zeros(2)
-            label[index] = 1.0
-            labels.append(label)
-            flbase = os.path.basename(file)
-            img_names.append(flbase)
+    patients = os.listdir(trainingPath + "/" + bp)'''
+  for fields in categories:   
+    index = categories.index(fields)
+    print('Now going to read {} files (Index: {})'.format(fields, index))
+    path = os.path.join(trainingPath, fields, '*g')
+    files = glob.glob(path)
+    for fl in files:
+      image = cv2.imread(fl)
+      image = cv2.resize(image, (imageSize, imageSize),0,0, cv2.INTER_LINEAR)
+      image = image.astype(np.float32)
+      image = np.multiply(image, 1.0 / 255.0)
+      images.append(image)
+      label = np.zeros(len(categories))
+      label[index] = 1.0
+      labels.append(label)
+      flbase = os.path.basename(fl)
+      img_names.append(flbase)
   images = np.array(images)
   labels = np.array(labels)
   img_names = np.array(img_names)
-  return images, labels, img_names
+  imagesList, labelsList, namesList = shuffle(images, labels, img_names)
+  return imagesList, labelsList, namesList
+
 
 # Fix shuffling function for these
 def makeTrainSet(images, labels, names, validationSize):
   imagesList = images[validationSize:]
   labelsList = labels[validationSize:]
   namesList = names[validationSize:]
-  imagesList, labelsList, namesList = shuffle(imagesList, labelsList, namesList)
+  #imagesList, labelsList, namesList = shuffle(imagesList, labelsList, namesList)
   return imagesList, labelsList, namesList
 
 def makeValidationSet(images, labels, names, validationSize):
   imagesList = images[:validationSize]
   labelsList = labels[:validationSize]
   namesList = names[:validationSize]
-  imagesList, labelsList, namesList = shuffle(imagesList, labelsList, namesList)
+  #imagesList, labelsList, namesList = shuffle(imagesList, labelsList, namesList)
   return imagesList, labelsList, namesList
 
-def getNewBatch(set, bound):
+def getNewBatch(set, bound, booly):
   xBatch = set[0]
   yBatch = set[1]
   newBound = bound + batchSize
-  if newBound > len(set[0]):
+  if booly == 0:
+    booly = set[0]
+  else:
+    booly = set[1]
+  if newBound > len(booly):
     newBound = newBound % len(set[0])
     return (xBatch[bound:]), (yBatch[bound:])
   else:
@@ -168,10 +164,8 @@ def create_fc_layer(input,
     
   # Define trainable weights and biases
   weights = tf.Variable(tf.truncated_normal([num_inputs, num_outputs], stddev=0.05))
-  variable_summaries(weights)
 
   biases = tf.Variable(tf.constant(0.05, shape=[num_outputs]))
-  variable_summaries(biases)
 
   # Fully connected layer takes input x and produces wx+b.
   layer = tf.matmul(input, weights) + biases
@@ -184,8 +178,12 @@ def show_progress(session, epoch, feed_dict_train, feed_dict_validate, val_loss,
                    merged, train_writer, test_writer, i):
   msg = "Training Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%},  Validation Loss: {3:.3f}"
   summary_train, acc = session.run([merged, accuracy], feed_dict=feed_dict_train)
+  if math.isnan(acc):
+    return
   train_writer.add_summary(summary_train, i)
   summary_test, val_acc = session.run([merged, accuracy], feed_dict=feed_dict_validate)
+  if math.isnan(val_acc):
+    return
   test_writer.add_summary(summary_test, i)
   print(msg.format(epoch + 1, acc, val_acc, val_loss))
 
@@ -199,8 +197,8 @@ def train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy,
   for i in range(total_iterations,
                   total_iterations + num_iteration):
       # Get next batch in sets and assign them
-      x_batch, y_true_batch = getNewBatch(trainingSet, trainingBound)
-      x_valid_batch, y_valid_batch = getNewBatch(validationSet, validBound)
+      x_batch, y_true_batch = getNewBatch(trainingSet, trainingBound, 0)
+      x_valid_batch, y_valid_batch = getNewBatch(validationSet, validBound, 1)
 
       # make sure bounds dont overflow
       trainingBound, validBound = updateBounds(trainingBound, trainingSet, validBound, validationSet)
@@ -229,7 +227,7 @@ def main():
   images, labels, img_names = preprocessImages(trainingPath)
 
   # 10% of images for validation
-  validationSize = int(len(images)/10)
+  validationSize = int(0.2*len(images))
 
   # List holds 
   #   1) List of images
@@ -259,28 +257,8 @@ def main():
                 num_input_channels=num_filters_conv2,
                 conv_filter_size=filter_size_conv3,
                 num_filters=num_filters_conv3)
-
-  layer_conv4= create_convolutional_layer(input=layer_conv3,
-                num_input_channels=num_filters_conv3,
-                conv_filter_size=filter_size_conv4,
-                num_filters=num_filters_conv4)
-
-  layer_conv5= create_convolutional_layer(input=layer_conv4,
-                num_input_channels=num_filters_conv4,
-                conv_filter_size=filter_size_conv5,
-                num_filters=num_filters_conv5)
-
-  layer_conv6= create_convolutional_layer(input=layer_conv5,
-                num_input_channels=num_filters_conv5,
-                conv_filter_size=filter_size_conv6,
-                num_filters=num_filters_conv6)
-
-  layer_conv7= create_convolutional_layer(input=layer_conv6,
-                num_input_channels=num_filters_conv6,
-                conv_filter_size=filter_size_conv7,
-                num_filters=num_filters_conv7)
             
-  layer_flat = create_flatten_layer(layer_conv7)
+  layer_flat = create_flatten_layer(layer_conv3)
 
   layer_fc1 = create_fc_layer(input=layer_flat,
                       num_inputs=layer_flat.get_shape()[1:4].num_elements(),
@@ -298,9 +276,11 @@ def main():
   session.run(tf.global_variables_initializer())
   crossEntropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits=layer_fc2, labels=y)
   cost = tf.reduce_mean(crossEntropy)
-  optimiser = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-5).minimize(cost)
+  tf.summary.scalar('cost',cost)
+  optimiser = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
   correctPrediction = tf.equal(y_pred_cls, yClasses)
   accuracy = tf.reduce_mean(tf.cast(correctPrediction, tf.float32))
+  tf.summary.scalar('accuracy',accuracy)
   merged = tf.compat.v1.summary.merge_all()
   trainWriter = tf.compat.v1.summary.FileWriter('summary/train', session.graph)
   testWriter = tf.compat.v1.summary.FileWriter('summary/test')
@@ -308,9 +288,9 @@ def main():
 
   saver = tf.compat.v1.train.Saver()
 
-  # 290 magic number best performance on my pc, but on different devices this number changes... 
+  # 4000 magic number best performance on my pc, but on different devices this number changes... 
   train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy, merged, 
-          trainWriter, testWriter , 10000, x, y)
+          trainWriter, testWriter , 4000, x, y)
 
 ############################
 # START OF PROGRAM

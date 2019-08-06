@@ -44,10 +44,31 @@ for (i, imagePath) in enumerate(imagePaths):
 	y.append(label)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
-clf = RandomForestClassifier()
-clf.fit(X_train, y_train)
-preds = clf.predict(X_test)
-p = clf.predict_proba(X_test)
-L = log_loss(y_test, p)
-print("Accuracy:", accuracy_score(y_test,preds)*100)
-print("Loss:", L*100)
+
+nes = [10, 20, 50, 100, 200, 500, 1000]
+accuracies = []
+costs = []
+for i in range(len(nes)):
+	clf = RandomForestClassifier(n_estimators=nes[i])
+	clf.fit(X_train, y_train)
+	preds = clf.predict(X_test)
+	acc = accuracy_score(y_test,preds)
+	p = clf.predict_proba(X_test)
+	L = log_loss(y_test, p)
+	accuracies.append(acc*100)
+	costs.append(L*100)
+	#print("Accuracy:{:.2f}%".format(acc*100))
+	#print("Loss: {:.2f}%".format(L*100))
+
+plt.subplot(2,1,1)
+plt.plot(nes, accuracies, 'b', marker="X")
+plt.title('Random Forest Accuracies and Costs (Pixel Intensity Focus)')
+plt.ylabel('Accuracy (%)')
+plt.grid()
+
+plt.subplot(2,1,2)
+plt.plot(nes, costs, 'r', marker="X")
+plt.ylabel('Cost (%)')
+plt.xlabel('No. of Trees')
+plt.grid()
+plt.show()

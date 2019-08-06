@@ -61,18 +61,17 @@ labels = np.array(labels)
 
 (trainRI, testRI, trainRL, testRL) = train_test_split(rawImages, labels, test_size=0.25, random_state=42)
 (trainFeat, testFeat, trainLabels, testLabels) = train_test_split(features, labels, test_size=0.25, random_state=42)
-neighbours = [1,2,4,6,8,10]
+neighbours = [10,20,50,100]
 paccuracies = []
 pcosts = []
 haccuracies = []
 hcosts = []
 
-for i in range (0, 6):
-	if i == 0:
-		nm = 1
-	else:
-		nm = i*2
-	model = KNeighborsClassifier(n_neighbors=nm, n_jobs=args["jobs"])
+for i in range(len(neighbours)):
+	#if i == 0:
+	#	nm = 1
+	#else:
+	model = KNeighborsClassifier(n_neighbors=neighbours[i], n_jobs=args["jobs"])
 	model.fit(trainRI, trainRL)
 	acc = model.score(testRI, testRL)
 	p = model.predict_proba(testRI)
@@ -82,7 +81,7 @@ for i in range (0, 6):
 	#print("[INFO] raw pixel accuracy: {:.2f}%".format(acc * 100))
 	#print("Raw pixel cost is: {:.2f}%".format(L))
 
-	model = KNeighborsClassifier(n_neighbors=nm, n_jobs=args["jobs"])
+	model = KNeighborsClassifier(n_neighbors=neighbours[i], n_jobs=args["jobs"])
 	model.fit(trainFeat, trainLabels)
 	acc = model.score(testFeat, testLabels)
 	p = model.predict_proba(testFeat)

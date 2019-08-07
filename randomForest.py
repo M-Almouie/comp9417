@@ -15,6 +15,9 @@ from sklearn.metrics import accuracy_score
 from imutils import paths
 from sklearn.metrics import log_loss
 
+# Snippets used from the following tutorial:
+# https://www.pyimagesearch.com/2016/08/08/k-nn-classifier-for-image-classification/
+
 def image_to_feature_vector(image, size=(32, 32)):
 	return cv2.resize(image, size).flatten()
 

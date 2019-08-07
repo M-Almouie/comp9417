@@ -2,6 +2,8 @@ import math, random, os, sys, time, glob, cv2
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
+import matplotlib.pyplot as plt
+from numpy import array
 
 # Hyperparameters
 batchSize = 16
@@ -32,19 +34,6 @@ filter_size_conv5 = 3
 num_filters_conv5 = 64
 
 fc_layer_size = 128
-
-# Tensorboard placeholders
-def variable_summaries(var):
-  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-  with tf.name_scope('summaries'):
-    mean = tf.reduce_mean(var)
-    tf.summary.scalar('mean', mean)
-    with tf.name_scope('stddev'):
-      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev', stddev)
-    tf.summary.scalar('max', tf.reduce_max(var))
-    tf.summary.scalar('min', tf.reduce_min(var))
-    tf.summary.histogram('histogram', var)
 
 def preprocessImages(trainingPath):
   images = []
@@ -191,6 +180,7 @@ def show_progress(session, epoch, feed_dict_train, feed_dict_validate, val_loss,
 
 def train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy, merged, trainWriter, 
           testWriter, num_iteration, x, y):
+ 
   total_iterations = 0
   trainingBound = 0
   validBound = 0
@@ -209,13 +199,14 @@ def train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy,
 
       # run training algo
       session.run(optimiser, feed_dict=feed_dict_tr)
-      if i % 10 == 0:
+      if i % 20 == 0:
           val_loss = session.run(cost, feed_dict=feed_dict_val)
           epoch = int(i/10)
           
           show_progress(session, epoch, feed_dict_tr, feed_dict_val, val_loss,
                         accuracy, merged, trainWriter, testWriter, i)
           saver.save(session, './modelCheckpoints/MURA-model') 
+
   total_iterations += num_iteration
 
 def main():
@@ -227,7 +218,7 @@ def main():
   images, labels, img_names = preprocessImages(trainingPath)
 
   # 10% of images for validation
-  validationSize = int(0.2*len(images))
+  validationSize = int(0.25*len(images))
 
   # List holds 
   #   1) List of images
@@ -242,7 +233,7 @@ def main():
   print("Number of files in Validation-set:\t{}".format(len(validationSet[1])))
 
   x, y, yClasses = createPlaceholders()
-  session = tf.Session()
+  
   layer_conv1 = create_convolutional_layer(input=x,
                 num_input_channels=numChannels,
                 conv_filter_size=filter_size_conv1,
@@ -273,6 +264,7 @@ def main():
   y_pred = tf.compat.v1.nn.softmax(layer_fc2,name='y_pred')
 
   y_pred_cls = tf.compat.v1.argmax(y_pred, dimension=1)
+  session = tf.Session()
   session.run(tf.global_variables_initializer())
   crossEntropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits=layer_fc2, labels=y)
   cost = tf.reduce_mean(crossEntropy)
@@ -292,6 +284,27 @@ def main():
   train(session, saver, trainingSet, validationSet, optimiser, cost, accuracy, merged, 
           trainWriter, testWriter , 4000, x, y)
 
+  # Following 2 methods from the tutorial: 
+  # https://medium.com/@awjuliani/visualizing-neural-network-layer-activation-tensorflow-tutorial-d45f8bf7bbc4
+  def getActivations(layer,stimuli):
+    units = session.run(layer,feed_dict={x:array(stimuli).reshape(1, imageSize,imageSize,numChannels)})
+    plotNNFilter(units)
+
+  def plotNNFilter(units):
+      filters = units.shape[3]
+      plt.figure(1, figsize=(20,20))
+      n_columns = 6
+      n_rows = math.ceil(filters / n_columns) + 1
+      for i in range(filters):
+          plt.subplot(n_rows, n_columns, i+1)
+          plt.title('Filter ' + str(i))
+          plt.imshow(units[0,:,:,i], interpolation="nearest", cmap="gray")
+      plt.show()
+  
+  imageToUse = trainingSet[0][0]
+  plt.imshow(imageToUse, interpolation="nearest", cmap="gray")
+  plt.show()
+  getActivations(layer_conv3,imageToUse)
 ############################
 # START OF PROGRAM
 main()

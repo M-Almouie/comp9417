@@ -21,6 +21,16 @@ from sklearn.metrics import log_loss
 def image_to_feature_vector(image, size=(32, 32)):
 	return cv2.resize(image, size).flatten()
 
+def extract_color_histogram(image, bins=(8, 8, 8)):
+	hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+	hist = cv2.calcHist([hsv], [0, 1, 2], None, bins,
+		[0, 180, 0, 256, 0, 256])
+	if imutils.is_cv2():
+		hist = cv2.normalize(hist)
+	else:
+		cv2.normalize(hist, hist)
+	return hist.flatten()
+
 imageSize = 64
 categories = ['positive', 'negative']
 
@@ -32,6 +42,7 @@ imagePaths = list(paths.list_images(args["dataset"]))
 
 X = []
 y = []
+hists = []
 
 # loop over the input images
 for (i, imagePath) in enumerate(imagePaths):
@@ -42,15 +53,25 @@ for (i, imagePath) in enumerate(imagePaths):
 
 	image = cv2.imread(imagePath)
 	v = image_to_feature_vector(image)
+	hist = extract_color_histogram(image)
 
 	X.append(v)
 	y.append(label)
+	hists.append(hist)
+
+X = np.array(X)
+hists = np.array(hists)
+y = np.array(y)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+hists_train,hists_test, yh_train, yh_test = train_test_split(X, y, test_size=0.25, random_state=42)
 
 nes = [10, 20, 50, 100, 200, 500, 1000]
-accuracies = []
-costs = []
+paccuracies = []
+pcosts = []
+haccuracies = []
+hcosts = []
+
 for i in range(len(nes)):
 	clf = RandomForestClassifier(n_estimators=nes[i])
 	clf.fit(X_train, y_train)
@@ -58,20 +79,40 @@ for i in range(len(nes)):
 	acc = accuracy_score(y_test,preds)
 	p = clf.predict_proba(X_test)
 	L = log_loss(y_test, p)
-	accuracies.append(acc*100)
-	costs.append(L*100)
-	#print("Accuracy:{:.2f}%".format(acc*100))
-	#print("Loss: {:.2f}%".format(L*100))
+	paccuracies.append(acc*100)
+	pcosts.append(L*100)
+	
+	clf = RandomForestClassifier(n_estimators=nes[i])
+	clf.fit(hists_train, yh_train)
+	preds = clf.predict(hists_test)
+	acc = accuracy_score(yh_test,preds)
+	p = clf.predict_proba(hists_test)
+	L = log_loss(yh_test, p)
+	haccuracies.append(acc*100)
+	hcosts.append(L*100)
 
 plt.subplot(2,1,1)
-plt.plot(nes, accuracies, 'b', marker="X")
-plt.title('Random Forest Accuracies and Costs (Pixel Intensity Focus)')
+plt.plot(nes, paccuracies, 'b', marker="X")
+plt.title('Random Forest Accuracy and Cost (Pixel Intensity Focus)')
 plt.ylabel('Accuracy (%)')
 plt.grid()
 
 plt.subplot(2,1,2)
-plt.plot(nes, costs, 'r', marker="X")
+plt.plot(nes, pcosts, 'r', marker="X")
 plt.ylabel('Cost (%)')
 plt.xlabel('No. of Trees')
+plt.grid()
+plt.show()
+
+plt.subplot(2,1,1)
+plt.plot(nes, haccuracies, 'b', marker="X")
+plt.title('Random Forest Accuracy and Cost (Histogram Focus)')
+plt.ylabel('Accuracy (%)')
+plt.grid()
+
+plt.subplot(2,1,2)
+plt.plot(nes, hcosts, 'r', marker="X")
+plt.ylabel('Cost (%)')
+plt.xlabel('No. of Neighbours')
 plt.grid()
 plt.show()
